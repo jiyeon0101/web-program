@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>카공앱 — 공부하기 좋은 카페 지도</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700;900&family=Noto+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1C2128;
+    --ink-soft:#4A5560;
+    --paper:#F7F3EA;
+    --paper-soft:#EFE7D3;
+    --paper-line: rgba(28,33,40,0.12);
+    --amber:#E3A857;
+    --amber-deep:#B9862E;
+    --moss:#54654A;
+    --moss-deep:#3E4B37;
+    --rust:#B04A34;
+    --rust-deep:#8C3A29;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{
+    height:100%; margin:0; padding:0;
+    background:var(--ink);
+    font-family:'Noto Sans KR', sans-serif;
+    color:var(--ink);
+    overscroll-behavior:none;
+  }
+  #app{
+    position:relative;
+    width:100%; height:100vh; max-width:480px; margin:0 auto;
+    background:var(--paper);
+    overflow:hidden;
+    display:flex; flex-direction:column;
+    box-shadow: 0 0 60px rgba(0,0,0,0.5);
+  }
+
+  /* ---------- HEADER ---------- */
+  header{
+    position:relative; z-index:30;
+    padding:16px 18px 12px;
+    background:var(--paper);
+    border-bottom:1px solid var(--paper-line);
+  }
+  .brand-row{
+    display:flex; align-items:baseline; justify-content:space-between;
+    margin-bottom:12px;
+  }
+  .brand{
+    font-family:'Noto Serif KR', serif;
+    font-weight:900;
+    font-size:22px;
+    letter-spacing:-0.02em;
+    color:var(--ink);
+    display:flex; align-items:baseline; gap:6px;
+  }
+  .brand::before{
+    content:"珈";
+    font-family:'Noto Serif KR', serif;
+    font-size:16px;
+    color:var(--paper);
+    background:var(--ink);
+    width:24px;height:24px;
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:6px;
+    transform: rotate(-6deg);
+  }
+  .brand-sub{
+    font-size:11px; color:var(--ink-soft); font-weight:500;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .search-bar{
+    display:flex; align-items:center; gap:10px;
+    background:var(--paper-soft);
+    border:1px solid var(--paper-line);
+    border-radius:12px;
+    padding:10px 14px;
+  }
+  .search-bar svg{ flex:none; opacity:0.55; }
+  .search-bar input{
+    border:none; background:transparent; outline:none;
+    font-family:'Noto Sans KR', sans-serif;
+    font-size:14px; color:var(--ink); width:100%;
+  }
+  .search-bar input::placeholder{ color:var(--ink-soft); opacity:0.75; }
+
+  /* ---------- FILTER CHIPS ---------- */
+  .filters{
+    display:flex; gap:8px; overflow-x:auto;
+    padding:12px 18px; background:var(--paper);
+    border-bottom:1px solid var(--paper-line);
+    scrollbar-width:none; position:relative; z-index:30;
+  }
+  .filters::-webkit-scrollbar{display:none;}
+  .chip{
+    flex:none;
+    font-family:'Noto Sans KR', sans-serif;
+    font-size:12.5px; font-weight:600;
+    padding:7px 13px;
+    border-radius:999px;
+    border:1px solid var(--paper-line);
+    background:#fff;
+    color:var(--ink-soft);
+    cursor:pointer;
+    white-space:nowrap;
+    transition: all .15s ease;
+    user-select:none;
+  }
+  .chip.active{
+    background:var(--ink); color:var(--paper); border-color:var(--ink);
+  }
+
+  /* ---------- MAP ---------- */
+  .map-wrap{
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+  }
+  #map{ position:absolute; inset:0; background:var(--paper-soft); }
+  .leaflet-container{ font-family:'Noto Sans KR', sans-serif; }
+
+  .pin{
+    width:38px; height:38px;
+    display:flex; align-items:center; justify-content:center;
+    position:relative;
+    cursor:pointer;
+  }
+  .pin-badge{
+    width:34px; height:34px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:12px;
+    color:#fff;
+    border:2px solid var(--paper);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.28);
+    transition: transform .15s ease;
+  }
+  .pin.selected .pin-badge{ transform:scale(1.22); box-shadow:0 4px 14px rgba(0,0,0,0.4); }
+  .pin-tier-high .pin-badge{ background:var(--moss); }
+  .pin-tier-mid .pin-badge{ background:var(--amber-deep); }
+  .pin-tier-low .pin-badge{ background:var(--rust); }
+
+  .locate-btn{
+    position:absolute; right:14px; bottom:14px; z-index:20;
+    width:42px; height:42px; border-radius:50%;
+    background:#fff; border:1px solid var(--paper-line);
+    box-shadow:0 4px 10px rgba(0,0,0,0.15);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+
+  /* ---------- BOTTOM SHEET ---------- */
+  .sheet{
+    position:absolute; left:0; right:0; bottom:0; z-index:25;
+    max-width:480px; margin:0 auto;
+    background:var(--paper);
+    border-radius:20px 20px 0 0;
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.18);
+    display:flex; flex-direction:column;
+    height:74%;
+    transform: translateY(calc(100% - 132px));
+    transition: transform .32s cubic-bezier(.2,.8,.25,1);
+    touch-action:none;
+  }
+  .sheet.expanded{ transform: translateY(0); }
+  .sheet-handle-area{
+    flex:none; padding:10px 18px 8px; cursor:grab;
+  }
+  .sheet-grip{
+    width:36px; height:4px; border-radius:3px; background:var(--paper-line);
+    margin:0 auto 10px;
+  }
+  .sheet-title-row{
+    display:flex; align-items:baseline; justify-content:space-between;
+  }
+  .sheet-title{
+    font-family:'Noto Serif KR', serif; font-weight:700; font-size:16px;
+  }
+  .sheet-count{
+    font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft);
+  }
+  .sheet-list{
+    flex:1 1 auto; overflow-y:auto; padding:4px 14px 24px;
+  }
+
+  /* ---------- CAFE CARD ---------- */
+  .cafe-card{
+    display:flex; gap:12px;
+    padding:12px; margin-bottom:10px;
+    background:#fff;
+    border:1px solid var(--paper-line);
+    border-radius:14px;
+    cursor:pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .cafe-card.active{
+    border-color:var(--ink);
+    background:var(--paper-soft);
+  }
+  .cafe-thumb{
+    flex:none; width:64px; height:64px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:22px;
+  }
+  .cafe-body{ flex:1; min-width:0; }
+  .cafe-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .cafe-name{
+    font-family:'Noto Serif KR', serif; font-weight:700; font-size:14.5px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .cafe-meta{
+    font-size:11.5px; color:var(--ink-soft); margin-top:2px;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .cafe-tags{ display:flex; gap:5px; margin-top:7px; flex-wrap:wrap; }
+  .tag{
+    font-size:10.5px; font-weight:600; padding:3px 7px; border-radius:6px;
+    background:var(--paper-soft); color:var(--ink-soft);
+    display:flex; align-items:center; gap:3px;
+  }
+  .tag.good{ background:rgba(84,101,74,0.13); color:var(--moss-deep); }
+  .tag.warn{ background:rgba(176,74,52,0.12); color:var(--rust-deep); }
+
+  /* ---------- STAMP (signature element) ---------- */
+  .stamp{
+    flex:none;
+    width:52px; height:52px;
+    position:relative;
+    display:flex; align-items:center; justify-content:center;
+    transform: rotate(-9deg);
+    mix-blend-mode:multiply;
+  }
+  .stamp-ring{
+    position:absolute; inset:0;
+    border-radius: 47% 53% 49% 51% / 52% 48% 53% 47%;
+    border:2.5px solid currentColor;
+  }
+  .stamp-ring::after{
+    content:"";
+    position:absolute; inset:4px;
+    border-radius: 51% 49% 53% 47% / 47% 53% 48% 52%;
+    border:1px solid currentColor;
+    opacity:0.55;
+  }
+  .stamp-score{
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600; font-size:16px; line-height:1;
+  }
+  .stamp-label{
+    position:absolute; bottom:1px; left:0; right:0; text-align:center;
+    font-size:6.5px; letter-spacing:0.04em; font-weight:700;
+  }
+  .stamp.tier-high{ color:var(--moss); }
+  .stamp.tier-mid{ color:var(--amber-deep); }
+  .stamp.tier-low{ color:var(--rust); }
+
+  /* ---------- DETAIL SHEET (when a card is opened) ---------- */
+  .detail{
+    position:absolute; inset:0; z-index:40;
+    background:var(--paper);
+    transform:translateY(100%);
+    transition: transform .3s cubic-bezier(.2,.8,.25,1);
+    display:flex; flex-direction:column;
+  }
+  .detail.open{ transform:translateY(0); }
+  .detail-header{
+    flex:none; padding:16px 18px 10px;
+    display:flex; align-items:center; gap:12px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  .back-btn{
+    width:34px; height:34px; border-radius:50%;
+    background:var(--paper-soft); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; flex:none;
+  }
+  .detail-hero{
+    height:150px; display:flex; align-items:center; justify-content:center;
+    font-size:52px;
+  }
+  .detail-body{ padding:16px 20px 30px; overflow-y:auto; }
+  .detail-name{ font-family:'Noto Serif KR', serif; font-weight:900; font-size:21px; }
+  .detail-addr{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft); margin-top:4px; }
+  .detail-stamp-row{ display:flex; align-items:center; gap:14px; margin:18px 0; }
+  .detail-stamp-row .stamp{ width:74px; height:74px; }
+  .detail-stamp-row .stamp-score{ font-size:22px; }
+  .detail-stamp-row .stamp-label{ font-size:8.5px; }
+  .detail-stamp-copy{ font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
+  .detail-stamp-copy b{ color:var(--ink); }
+  .stat-grid{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px;
+  }
+  .stat{
+    border:1px solid var(--paper-line); border-radius:12px; padding:12px;
+    background:#fff;
+  }
+  .stat-label{ font-size:11px; color:var(--ink-soft); font-weight:600; }
+  .stat-value{ font-family:'Noto Serif KR', serif; font-size:15px; font-weight:700; margin-top:3px; }
+
+  .kw-section-label{ font-size:12px; font-weight:700; color:var(--ink-soft); margin-top:22px; margin-bottom:8px; }
+  .kw-list{ display:flex; flex-direction:column; gap:9px; }
+  .kw-row{ display:flex; align-items:center; gap:10px; }
+  .kw-row-label{ flex:none; width:118px; font-size:12px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .kw-row-track{ flex:1; height:8px; border-radius:4px; background:var(--paper-soft); overflow:hidden; }
+  .kw-row-fill{ height:100%; border-radius:4px; background:var(--moss); }
+  .kw-row-count{ flex:none; width:24px; text-align:right; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft); }
+  .detail-notes{
+    margin-top:18px; padding:14px; border-radius:12px;
+    background:var(--paper-soft); font-size:12.5px; line-height:1.6; color:var(--ink-soft);
+  }
+  .detail-notes b{ color:var(--ink); }
+
+  ::-webkit-scrollbar{ width:0; height:0; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <header>
+    <div class="brand-row">
+      <div class="brand">카공앱</div>
+      <div class="brand-sub">SEOUL · STUDY CAFE MAP</div>
+    </div>
+    <div class="search-bar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" placeholder="동네, 카페 이름으로 찾아보세요" />
+    </div>
+  </header>
+
+  <div class="filters" id="filters">
+    <div class="chip" data-filter="outlet">콘센트 많음</div>
+    <div class="chip" data-filter="quiet">조용함</div>
+    <div class="chip" data-filter="notime">시간제한 없음</div>
+    <div class="chip" data-filter="wifi">와이파이 빠름</div>
+    <div class="chip" data-filter="24h">24시간</div>
+  </div>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="locate-btn" id="locateBtn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1C2128" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2"/></svg>
+    </div>
+
+    <div class="sheet" id="sheet">
+      <div class="sheet-handle-area" id="sheetHandle">
+        <div class="sheet-grip"></div>
+        <div class="sheet-title-row">
+          <div class="sheet-title">근처 카공 카페</div>
+          <div class="sheet-count" id="sheetCount">8곳</div>
+        </div>
+      </div>
+      <div class="sheet-list" id="sheetList"></div>
+    </div>
+
+    <div class="detail" id="detail">
+      <div class="detail-header">
+        <div class="back-btn" id="backBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1C2128" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>
+        </div>
+        <div style="font-family:'Noto Serif KR',serif; font-weight:700; font-size:14px;">카페 정보</div>
+      </div>
+      <div id="detailContent" style="overflow-y:auto;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ---------------- DATA ----------------
+// keywords: 리뷰 작성 시 사용자가 선택한 키워드와 누적 선택 횟수.
+// rating: 리뷰 별점(1~5)의 평균 (베이지안 보정 적용, 아래 bayesianRating 참고)
+const KEYWORD_META = {
+  outlet: { emoji:"🔌", label:"콘센트 많아요" },
+  quiet:  { emoji:"🔇", label:"조용해요" },
+  notime: { emoji:"⏱",  label:"시간제한 없어요" },
+  wifi:   { emoji:"📶", label:"와이파이 빨라요" },
+  h24:    { emoji:"🌙", label:"24시간 운영" },
+};
+
+const CAFES = [
+  { id:1, name:"연남동 책방골목 커피", emoji:"📚", lat:37.5638, lng:126.9257, area:"연남동",
+    rating:4.6, reviewCount:51,
+    keywords:{ outlet:38, quiet:29, notime:15, wifi:22 },
+    walk:"6분", seats:"1인석 다수", note:"창가 자리는 콘센트가 없어서 안쪽 좌석을 추천해요. 오후 2시 이후 좀 붐벼요." },
+  { id:2, name:"홍대 나이트오울 스터디카페", emoji:"🦉", lat:37.5563, lng:126.9236, area:"홍대",
+    rating:4.3, reviewCount:74,
+    keywords:{ outlet:45, notime:40, wifi:30, h24:52 },
+    walk:"11분", seats:"2인 테이블 위주", note:"24시간 운영이라 새벽 공부에도 좋아요. 저녁엔 대화 소리가 좀 있는 편." },
+  { id:3, name:"성수 브루웍스", emoji:"☕", lat:37.5445, lng:127.0559, area:"성수동",
+    rating:3.2, reviewCount:26,
+    keywords:{ outlet:4, wifi:6 },
+    walk:"3분", seats:"전체 8석", note:"공간은 예쁘지만 좌석이 적고 2시간 제한이 있어요. 사진 찍기 좋은 카페." },
+  { id:4, name:"합정 리브레리아", emoji:"🕯️", lat:37.5495, lng:126.9138, area:"합정동",
+    rating:4.8, reviewCount:63,
+    keywords:{ outlet:55, quiet:58, notime:20, wifi:40 },
+    walk:"8분", seats:"1인 독서실형 좌석", note:"거의 도서관 분위기예요. 전화 통화는 밖에서 해야 할 정도로 조용합니다." },
+  { id:5, name:"강남 데스크37", emoji:"💻", lat:37.4989, lng:127.0289, area:"강남역",
+    rating:4.1, reviewCount:88,
+    keywords:{ outlet:70, notime:33, wifi:61 },
+    walk:"5분", seats:"콘센트 완비 대형 테이블", note:"직장인들도 노트북 들고 많이 와요. 점심시간엔 자리 경쟁이 있어요." },
+  { id:6, name:"이태원 앤솔로지", emoji:"🌙", lat:37.5347, lng:126.9946, area:"이태원",
+    rating:3.6, reviewCount:34,
+    keywords:{ notime:19, h24:28 },
+    walk:"14분", seats:"소파석 위주", note:"밤늦게까지 여는 게 장점. 와이파이가 가끔 느려질 때가 있어요." },
+  { id:7, name:"신촌 페이지터너", emoji:"📖", lat:37.5559, lng:126.9368, area:"신촌",
+    rating:4.4, reviewCount:41,
+    keywords:{ outlet:36, quiet:30, wifi:24 },
+    walk:"9분", seats:"칸막이 좌석", note:"3시간 제한이 있지만 좌석마다 칸막이가 있어 집중이 잘 돼요." },
+  { id:8, name:"서촌 담소헌", emoji:"🍵", lat:37.5807, lng:126.9698, area:"서촌",
+    rating:2.9, reviewCount:12,
+    keywords:{ wifi:2 },
+    walk:"7분", seats:"한옥 마루석", note:"분위기는 최고지만 카공보다는 티타임에 어울리는 곳이에요." },
+];
+
+// 리뷰가 적은 카페의 평점이 극단으로 튀지 않도록 전체 평균 쪽으로 살짝 당겨주는 보정.
+// C(가상 리뷰 수)와 m(전체 평균)은 서비스 데이터가 쌓이면 실제 값으로 교체.
+function bayesianRating(rating, count){
+  const C = 8, m = 4.0;
+  return ((count * rating) + (C * m)) / (count + C);
+}
+
+function tierOf(rating){ return rating>=4.5 ? "high" : rating>=3.5 ? "mid" : "low"; }
+function tierColor(tier){ return tier==="high" ? "#54654A" : tier==="mid" ? "#B9862E" : "#B04A34"; }
+function topKeywords(cafe, n){
+  return Object.entries(cafe.keywords)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0, n)
+    .map(([key,count]) => ({ key, count, ...KEYWORD_META[key] }));
+}
+
+// ---------------- MAP ----------------
+const map = L.map('map', { zoomControl:false, attributionControl:false }).setView([37.5565, 126.9780], 12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+  maxZoom:19, subdomains:'abcd'
+}).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
+  maxZoom:19, subdomains:'abcd', opacity:0.85
+}).addTo(map);
+L.control.attribution({prefix:false}).addAttribution('© OpenStreetMap, © CARTO').addTo(map);
+map.attributionControl && map.attributionControl.setPosition && map.attributionControl.setPosition('bottomleft');
+
+const markers = {};
+CAFES.forEach(c => {
+  const tier = tierOf(c.rating);
+  const icon = L.divIcon({
+    className:'',
+    html:`<div class="pin pin-tier-${tier}" data-id="${c.id}"><div class="pin-badge">${c.rating.toFixed(1)}</div></div>`,
+    iconSize:[38,38], iconAnchor:[19,19]
+  });
+  const m = L.marker([c.lat, c.lng], { icon }).addTo(map);
+  m.on('click', () => openDetail(c.id));
+  markers[c.id] = m;
+});
+
+document.getElementById('locateBtn').addEventListener('click', () => {
+  map.flyTo([37.5565, 126.9780], 12, { duration:0.6 });
+});
+
+// ---------------- RENDER LIST ----------------
+const sheetList = document.getElementById('sheetList');
+const sheetCount = document.getElementById('sheetCount');
+let activeFilters = new Set();
+let activeCardId = null;
+
+function stampHTML(cafe){
+  const tier = tierOf(cafe.rating);
+  return `<div class="stamp tier-${tier}">
+      <div class="stamp-ring"></div>
+      <div class="stamp-score">${cafe.rating.toFixed(1)}</div>
+      <div class="stamp-label">카공지수</div>
+    </div>`;
+}
+
+function keywordPillsHTML(cafe, n){
+  return topKeywords(cafe, n)
+    .map(k => `<span class="tag good">${k.emoji} ${k.label} · ${k.count}</span>`)
+    .join('');
+}
+
+function matchesFilters(cafe){
+  for (const f of activeFilters){
+    if (!cafe.keywords[f]) return false; // 해당 키워드로 리뷰가 하나도 없으면 제외
+  }
+  return true;
+}
+
+function renderList(){
+  const list = CAFES.filter(matchesFilters).sort((a,b)=>b.rating-a.rating);
+  sheetCount.textContent = `${list.length}곳`;
+  sheetList.innerHTML = '';
+
+  if (list.length === 0){
+    sheetList.innerHTML = `<div style="text-align:center; padding:40px 20px; color:var(--ink-soft); font-size:13px; line-height:1.6;">
+      조건에 맞는 카페가 아직 없어요.<br>필터를 하나씩 풀어보세요.</div>`;
+    return;
+  }
+
+  list.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'cafe-card' + (c.id===activeCardId ? ' active' : '');
+    card.innerHTML = `
+      <div class="cafe-thumb" style="background:${tierColor(tierOf(c.rating))}1A;">${c.emoji}</div>
+      <div class="cafe-body">
+        <div class="cafe-top">
+          <div class="cafe-name">${c.name}</div>
+        </div>
+        <div class="cafe-meta">${c.area} · 도보 ${c.walk} · 리뷰 ${c.reviewCount}개</div>
+        <div class="cafe-tags">${keywordPillsHTML(c, 3)}</div>
+      </div>
+      ${stampHTML(c)}
+    `;
+    card.addEventListener('click', () => openDetail(c.id));
+    sheetList.appendChild(card);
+  });
+}
+
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const f = chip.dataset.filter;
+    if (activeFilters.has(f)){ activeFilters.delete(f); chip.classList.remove('active'); }
+    else { activeFilters.add(f); chip.classList.add('active'); }
+    renderList();
+  });
+});
+
+// ---------------- DETAIL VIEW ----------------
+const detail = document.getElementById('detail');
+const detailContent = document.getElementById('detailContent');
+
+function openDetail(id){
+  const c = CAFES.find(x=>x.id===id);
+  activeCardId = id;
+  document.querySelectorAll('.pin').forEach(p => p.classList.toggle('selected', Number(p.dataset.id)===id));
+  map.flyTo([c.lat, c.lng], 15, { duration:0.5 });
+
+  const maxCount = Math.max(...Object.values(c.keywords), 1);
+  const keywordRows = topKeywords(c, 5).map(k => `
+    <div class="kw-row">
+      <div class="kw-row-label">${k.emoji} ${k.label}</div>
+      <div class="kw-row-track"><div class="kw-row-fill" style="width:${Math.round(k.count/maxCount*100)}%"></div></div>
+      <div class="kw-row-count">${k.count}</div>
+    </div>`).join('');
+
+  detailContent.innerHTML = `
+    <div class="detail-hero" style="background:${tierColor(tierOf(c.rating))}14;">${c.emoji}</div>
+    <div class="detail-body">
+      <div class="detail-name">${c.name}</div>
+      <div class="detail-addr">${c.area} · 도보 ${c.walk} · 리뷰 ${c.reviewCount}개</div>
+
+      <div class="detail-stamp-row">
+        ${stampHTML(c)}
+        <div class="detail-stamp-copy"><b>카공지수 ${c.rating.toFixed(1)}점</b> — 방문자들이 남긴 별점의 평균이에요. 리뷰가 쌓일수록 정확해져요.</div>
+      </div>
+
+      <div class="kw-section-label">방문자들이 많이 고른 키워드</div>
+      <div class="kw-list">${keywordRows || '<div class="cafe-meta">아직 등록된 키워드가 없어요.</div>'}</div>
+
+      <div class="detail-notes"><b>좌석 메모</b><br>${c.seats} · ${c.note}</div>
+    </div>
+  `;
+  detail.classList.add('open');
+}
+document.getElementById('backBtn').addEventListener('click', () => {
+  detail.classList.remove('open');
+});
+
+// ---------------- BOTTOM SHEET DRAG ----------------
+const sheet = document.getElementById('sheet');
+const sheetHandle = document.getElementById('sheetHandle');
+let dragStartY = 0, sheetStartTranslate = 0, dragging = false;
+
+function getSheetTranslateY(){
+  const style = window.getComputedStyle(sheet);
+  const matrix = new DOMMatrixReadOnly(style.transform);
+  return matrix.m42;
+}
+
+sheetHandle.addEventListener('pointerdown', (e) => {
+  dragging = true;
+  dragStartY = e.clientY;
+  sheetStartTranslate = getSheetTranslateY();
+  sheet.style.transition = 'none';
+  sheetHandle.setPointerCapture(e.pointerId);
+});
+sheetHandle.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const delta = e.clientY - dragStartY;
+  let next = sheetStartTranslate + delta;
+  next = Math.max(0, next);
+  sheet.style.transform = `translateY(${next}px)`;
+});
+function endDrag(){
+  if (!dragging) return;
+  dragging = false;
+  sheet.style.transition = '';
+  const y = getSheetTranslateY();
+  const threshold = sheet.offsetHeight * 0.3;
+  if (y < threshold){ sheet.classList.add('expanded'); sheet.style.transform=''; }
+  else { sheet.classList.remove('expanded'); sheet.style.transform=''; }
+}
+sheetHandle.addEventListener('pointerup', endDrag);
+sheetHandle.addEventListener('pointercancel', endDrag);
+sheetHandle.addEventListener('click', () => {
+  if (!dragging) sheet.classList.toggle('expanded');
+});
+
+// init
+renderList();
+</script>
+</body>
+</html>
