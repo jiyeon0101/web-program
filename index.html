@@ -28,10 +28,11 @@
     background:var(--ink);
     font-family:'Noto Sans KR', sans-serif;
     color:var(--ink);
+    overflow:hidden; /* body 스크롤을 없애서 주소창이 열렸다 닫혔다 하지 않게 고정 */
     overscroll-behavior:none;
   }
   #app{
-    position:relative;
+    position:fixed; inset:0; /* 문서 흐름/스크롤과 무관하게 화면에 고정 */
     width:100%; height:var(--app-height); max-width:480px; margin:0 auto;
     background:var(--paper);
     overflow:hidden;
