@@ -126,6 +126,8 @@
   }
   #map{ position:absolute; inset:0; z-index:1; background:var(--paper-soft); } /* z-index로 stacking context를 만들어 Leaflet 내부 레이어(400~700)를 이 안에 가둠 */
   .leaflet-container{ font-family:'Noto Sans KR', sans-serif; }
+  /* OSM 기본 색을 앱의 종이톤에 어울리게 살짝 눌러줌 */
+  .leaflet-tile-pane{ filter: saturate(0.55) sepia(0.18) contrast(0.96) brightness(1.02); }
 
   .pin{
     width:38px; height:38px;
@@ -476,13 +478,13 @@ function topKeywords(cafe, n){
 // ---------------- MAP ----------------
 const HOME_VIEW = { center:[37.6255, 127.0725], zoom:15 }; // 공릉숲길(경춘선숲길) 일대
 const map = L.map('map', { zoomControl:false, attributionControl:false }).setView(HOME_VIEW.center, HOME_VIEW.zoom);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
-  maxZoom:19, subdomains:'abcd'
+// CARTO 무료 타일이 API 키를 요구하게 되어(타일 위에 "API KEY REQUIRED" 표시),
+// 키가 필요 없는 OpenStreetMap 표준 타일로 교체. 한국에서는 한글 지명으로 표시됨.
+// 트래픽이 늘면 OSM 사용 정책상 MapTiler/Stadia 등 키 방식 타일이나 국내 지도 API로 전환 필요.
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom:19
 }).addTo(map);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
-  maxZoom:19, subdomains:'abcd', opacity:0.85
-}).addTo(map);
-L.control.attribution({prefix:false}).addAttribution('© OpenStreetMap, © CARTO').addTo(map);
+L.control.attribution({prefix:false}).addAttribution('© OpenStreetMap contributors').addTo(map);
 map.attributionControl && map.attributionControl.setPosition && map.attributionControl.setPosition('bottomleft');
 
 const markers = {};
