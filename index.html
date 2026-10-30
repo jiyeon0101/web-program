@@ -146,6 +146,7 @@
   .pin-tier-high .pin-badge{ background:var(--moss); }
   .pin-tier-mid .pin-badge{ background:var(--amber-deep); }
   .pin-tier-low .pin-badge{ background:var(--rust); }
+  .pin-tier-none .pin-badge{ background:var(--ink-soft); }
 
   .locate-btn{
     position:absolute; right:14px; bottom:14px; z-index:20;
@@ -260,6 +261,8 @@
   .stamp.tier-high{ color:var(--moss); }
   .stamp.tier-mid{ color:var(--amber-deep); }
   .stamp.tier-low{ color:var(--rust); }
+  .stamp.tier-none{ color:var(--ink-soft); }
+  .tag.hint{ background:transparent; border:1px dashed var(--paper-line); color:var(--ink-soft); }
 
   /* ---------- DETAIL SHEET (when a card is opened) ---------- */
   .detail{
@@ -326,7 +329,7 @@
   <header>
     <div class="brand-row">
       <div class="brand">카공앱</div>
-      <div class="brand-sub">SEOUL · STUDY CAFE MAP</div>
+      <div class="brand-sub">GONGNEUNG · STUDY CAFE MAP</div>
     </div>
     <div class="search-bar">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -353,7 +356,7 @@
         <div class="sheet-grip"></div>
         <div class="sheet-title-row">
           <div class="sheet-title">근처 카공 카페</div>
-          <div class="sheet-count" id="sheetCount">8곳</div>
+          <div class="sheet-count" id="sheetCount">10곳</div>
         </div>
       </div>
       <div class="sheet-list" id="sheetList"></div>
@@ -432,7 +435,22 @@ const CAFES = [
     rating:2.9, reviewCount:12,
     keywords:{ wifi:2 },
     walk:"7분", seats:"한옥 마루석", note:"분위기는 최고지만 카공보다는 티타임에 어울리는 곳이에요." },
+
+  // ---- 공릉숲길(경춘선숲길) 인근 ----
+  // 아직 방문자 리뷰가 없어서 rating:null. hints는 공개 후기/소개글에서 확인된 정보이며
+  // 앱 사용자가 직접 고른 키워드(keywords)가 쌓이면 그쪽이 우선 표시돼요.
+  // 좌표는 대략적인 위치예요 (approxLoc) — 실제 주소 기준으로 보정 필요.
+  { id:9, name:"블루 마일스 커피", emoji:"☕", lat:37.6252, lng:127.0745, area:"공릉동 · 동일로190길 65",
+    rating:null, reviewCount:0, keywords:{}, hints:["outlet"], approxLoc:true,
+    walk:null, seats:"창가 좌석 많음",
+    note:"콘센트 자리가 많다는 후기가 있어요. 다만 이용 시간 제한이 있다는 후기(1건)와 주말에 매우 붐빈다는 후기가 있어서, 방문 전 확인을 추천해요." },
+  { id:10, name:"아고라 커피", emoji:"🌿", lat:37.6270, lng:127.0700, area:"공릉동 379-23",
+    rating:null, reviewCount:0, keywords:{}, hints:["outlet"], approxLoc:true,
+    walk:null, seats:"테이블 근처 콘센트",
+    note:"테이블 근처에 콘센트가 곳곳에 있어 노트북 작업에 무난하다는 소개글이 있어요. 숲길 카페거리에서는 조금 떨어져 있고, 오래된 소개글일 수 있어 현재 좌석 상황은 확인이 필요해요." },
 ];
+
+function ratingText(c){ return c.rating == null ? "–" : c.rating.toFixed(1); }
 
 // 리뷰가 적은 카페의 평점이 극단으로 튀지 않도록 전체 평균 쪽으로 살짝 당겨주는 보정.
 // C(가상 리뷰 수)와 m(전체 평균)은 서비스 데이터가 쌓이면 실제 값으로 교체.
@@ -441,8 +459,13 @@ function bayesianRating(rating, count){
   return ((count * rating) + (C * m)) / (count + C);
 }
 
-function tierOf(rating){ return rating>=4.5 ? "high" : rating>=3.5 ? "mid" : "low"; }
-function tierColor(tier){ return tier==="high" ? "#54654A" : tier==="mid" ? "#B9862E" : "#B04A34"; }
+function tierOf(rating){
+  if (rating == null) return "none"; // 아직 리뷰 없음
+  return rating>=4.5 ? "high" : rating>=3.5 ? "mid" : "low";
+}
+function tierColor(tier){
+  return tier==="high" ? "#54654A" : tier==="mid" ? "#B9862E" : tier==="low" ? "#B04A34" : "#4A5560";
+}
 function topKeywords(cafe, n){
   return Object.entries(cafe.keywords)
     .sort((a,b)=>b[1]-a[1])
@@ -451,7 +474,8 @@ function topKeywords(cafe, n){
 }
 
 // ---------------- MAP ----------------
-const map = L.map('map', { zoomControl:false, attributionControl:false }).setView([37.5565, 126.9780], 12);
+const HOME_VIEW = { center:[37.6255, 127.0725], zoom:15 }; // 공릉숲길(경춘선숲길) 일대
+const map = L.map('map', { zoomControl:false, attributionControl:false }).setView(HOME_VIEW.center, HOME_VIEW.zoom);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
   maxZoom:19, subdomains:'abcd'
 }).addTo(map);
@@ -466,7 +490,7 @@ CAFES.forEach(c => {
   const tier = tierOf(c.rating);
   const icon = L.divIcon({
     className:'',
-    html:`<div class="pin pin-tier-${tier}" data-id="${c.id}"><div class="pin-badge">${c.rating.toFixed(1)}</div></div>`,
+    html:`<div class="pin pin-tier-${tier}" data-id="${c.id}"><div class="pin-badge">${ratingText(c)}</div></div>`,
     iconSize:[38,38], iconAnchor:[19,19]
   });
   const m = L.marker([c.lat, c.lng], { icon }).addTo(map);
@@ -475,7 +499,7 @@ CAFES.forEach(c => {
 });
 
 document.getElementById('locateBtn').addEventListener('click', () => {
-  map.flyTo([37.5565, 126.9780], 12, { duration:0.6 });
+  map.flyTo(HOME_VIEW.center, HOME_VIEW.zoom, { duration:0.6 });
 });
 
 // ---------------- RENDER LIST ----------------
@@ -488,26 +512,34 @@ function stampHTML(cafe){
   const tier = tierOf(cafe.rating);
   return `<div class="stamp tier-${tier}">
       <div class="stamp-ring"></div>
-      <div class="stamp-score">${cafe.rating.toFixed(1)}</div>
-      <div class="stamp-label">카공지수</div>
+      <div class="stamp-score">${ratingText(cafe)}</div>
+      <div class="stamp-label">${cafe.rating == null ? "리뷰대기" : "카공지수"}</div>
     </div>`;
 }
 
+function hintPillsHTML(cafe){
+  return (cafe.hints || [])
+    .map(key => `<span class="tag hint">${KEYWORD_META[key].emoji} ${KEYWORD_META[key].label} (후기)</span>`)
+    .join('');
+}
+
 function keywordPillsHTML(cafe, n){
-  return topKeywords(cafe, n)
+  const real = topKeywords(cafe, n)
     .map(k => `<span class="tag good">${k.emoji} ${k.label} · ${k.count}</span>`)
     .join('');
+  return real || hintPillsHTML(cafe); // 방문자 키워드가 없으면 공개 후기 기반 정보를 점선 스타일로 표시
 }
 
 function matchesFilters(cafe){
   for (const f of activeFilters){
-    if (!cafe.keywords[f]) return false; // 해당 키워드로 리뷰가 하나도 없으면 제외
+    // 방문자 키워드가 있거나, 공개 후기에서 확인된 정보(hints)가 있으면 통과
+    if (!cafe.keywords[f] && !(cafe.hints || []).includes(f)) return false;
   }
   return true;
 }
 
 function renderList(){
-  const list = CAFES.filter(matchesFilters).sort((a,b)=>b.rating-a.rating);
+  const list = CAFES.filter(matchesFilters).sort((a,b)=>(b.rating ?? -1)-(a.rating ?? -1));
   sheetCount.textContent = `${list.length}곳`;
   sheetList.innerHTML = '';
 
@@ -526,7 +558,7 @@ function renderList(){
         <div class="cafe-top">
           <div class="cafe-name">${c.name}</div>
         </div>
-        <div class="cafe-meta">${c.area} · 도보 ${c.walk} · 리뷰 ${c.reviewCount}개</div>
+        <div class="cafe-meta">${c.area}${c.walk ? ` · 도보 ${c.walk}` : ''} · ${c.reviewCount ? `리뷰 ${c.reviewCount}개` : '리뷰 아직 없음'}</div>
         <div class="cafe-tags">${keywordPillsHTML(c, 3)}</div>
       </div>
       ${stampHTML(c)}
@@ -567,15 +599,18 @@ function openDetail(id){
     <div class="detail-hero" style="background:${tierColor(tierOf(c.rating))}14;">${c.emoji}</div>
     <div class="detail-body">
       <div class="detail-name">${c.name}</div>
-      <div class="detail-addr">${c.area} · 도보 ${c.walk} · 리뷰 ${c.reviewCount}개</div>
+      <div class="detail-addr">${c.area}${c.walk ? ` · 도보 ${c.walk}` : ''} · ${c.reviewCount ? `리뷰 ${c.reviewCount}개` : '리뷰 아직 없음'}</div>
 
       <div class="detail-stamp-row">
         ${stampHTML(c)}
-        <div class="detail-stamp-copy"><b>카공지수 ${c.rating.toFixed(1)}점</b> — 방문자들이 남긴 별점의 평균이에요. 리뷰가 쌓일수록 정확해져요.</div>
+        <div class="detail-stamp-copy">${c.rating == null
+          ? '<b>아직 방문자 리뷰가 없어요.</b> 아래 정보는 공개된 후기·소개글에서 확인된 내용이고, 방문자 별점이 쌓이면 카공지수가 매겨져요.'
+          : `<b>카공지수 ${ratingText(c)}점</b> — 방문자들이 남긴 별점의 평균이에요. 리뷰가 쌓일수록 정확해져요.`}</div>
       </div>
 
-      <div class="kw-section-label">방문자들이 많이 고른 키워드</div>
-      <div class="kw-list">${keywordRows || '<div class="cafe-meta">아직 등록된 키워드가 없어요.</div>'}</div>
+      <div class="kw-section-label">${keywordRows ? '방문자들이 많이 고른 키워드' : '공개 후기에서 확인된 정보'}</div>
+      <div class="kw-list">${keywordRows || (hintPillsHTML(c) ? `<div class="cafe-tags">${hintPillsHTML(c)}</div>` : '<div class="cafe-meta">아직 등록된 키워드가 없어요.</div>')}</div>
+      ${c.approxLoc ? '<div class="cafe-meta" style="margin-top:12px;">📍 지도 위치는 대략적인 위치예요.</div>' : ''}
 
       <div class="detail-notes"><b>좌석 메모</b><br>${c.seats} · ${c.note}</div>
     </div>
